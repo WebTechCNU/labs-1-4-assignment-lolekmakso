@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Grade Calculator</title>
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: auto; padding: 20px; }
+    input, button { margin: 5px 0; display: block; width: 100%; padding: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f4f4f4; }
+    .actions button { margin-right: 5px; }
+  </style>
+</head>
+<body>
+  <h1>Grade Calculator</h1>
+
+  <form id="grade-form">
+    <input type="hidden" id="grade-id" />
+    <input type="text" id="username" placeholder="Username" required />
+    
+    <input list="subjects" id="subject" placeholder="Subject" required />
+    <datalist id="subjects"></datalist>
+
+    <input type="number" id="grade" placeholder="Grade (0-100)" required />
+    <input type="number" id="weight" step="0.1" placeholder="Weight (0-1)" required />
+    <button type="submit">Save Grade</button>
+  </form>
+
+  <label for="filter-user">Filter by username:</label>
+  <input type="text" id="filter-user" placeholder="e.g. ivan.31" />
+
+  <h3>Average grade (weighted): <span id="average">—</span></h3>
+
+  <table id="grades-table">
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Subject</th>
+        <th>Grade</th>
+        <th>Weight</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    const API = "/.netlify/functions/grades";
+
+    async function fetchGrades(username = "") {
+      const url = username ? `${API}?username=${username}` : API;
+      const res = await fetch(url);
+      const data = await res.json();
+      renderGrades(data);
+    }
+
+    function renderGrades(grades) {
+      const tbody = document.querySelector("#grades-table tbody");
+      const avgDisplay = document.getElementById("average");
+      const subjectsSet = new Set();
+      tbody.innerHTML = "";
+
+      let total = 0;
+      let totalWeight = 0;
+
+      grades.forEach(g => {
+        subjectsSet.add(g.subject);
+        total += g.grade * g.weight;
+        totalWeight += g.weight;
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${g.username}</td>
+          <td>${g.subject}</td>
+          <td>${g.grade}</td>
+          <td>${g.weight}</td>
+          <td class="actions">
+            <button onclick='editGrade(${JSON.stringify(g)})'>✏️</button>
+            <button onclick='deleteGrade("${g._id}")'>🗑️</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      // datalist з існуючих предметів 
+      const datalist = document.getElementById("subjects");
+      datalist.innerHTML = "";
+      Array.from(subjectsSet).sort().forEach(subject => {
+        const option = document.createElement("option");
+        option.value = subject;
+        datalist.appendChild(option);
+      });
+
+      avgDisplay.textContent = totalWeight ? (total / totalWeight).toFixed(2) : "—";
+    }
+
+    document.getElementById("grade-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const id = document.getElementById("grade-id").value;
+      const gradeVal = parseFloat(document.getElementById("grade").value);
+      const weightVal = parseFloat(document.getElementById("weight").value);
+
+      if (gradeVal < 0 || gradeVal > 100 || weightVal < 0 || weightVal > 1) {
+        alert("Grade must be 0–100 and weight must be 0–1");
+        return;
+      }
+
+      const grade = {
+        username: document.getElementById("username").value,
+        subject: document.getElementById("subject").value,
+        grade: gradeVal,
+        weight: weightVal
+      };
+
+      const method = id ? "PUT" : "POST";
+      const url = id ? `${API}/${id}` : API;
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(grade)
+      });
+
+      if (res.ok) {
+        fetchGrades(document.getElementById("filter-user").value.trim());
+        e.target.reset();
+        document.getElementById("grade-id").value = "";
+      }
+    });
+
+    function editGrade(g) {
+      document.getElementById("grade-id").value = g._id;
+      document.getElementById("username").value = g.username;
+      document.getElementById("subject").value = g.subject;
+      document.getElementById("grade").value = g.grade;
+      document.getElementById("weight").value = g.weight;
+      window.scrollTo(0, 0);
+    }
+
+    async function deleteGrade(id) {
+      if (confirm("Delete this grade?")) {
+        await fetch(`${API}/${id}`, { method: "DELETE" });
+        fetchGrades(document.getElementById("filter-user").value.trim());
+      }
+    }
+
+    document.getElementById("filter-user").addEventListener("input", (e) => {
+      fetchGrades(e.target.value.trim());
+    });
+
+    fetchGrades();
+  </script>
+</body>
+</html>

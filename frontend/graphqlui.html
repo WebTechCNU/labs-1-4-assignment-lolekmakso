@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>GraphQL Grade Viewer</title>
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: auto; padding: 20px; }
+    input, button { margin: 5px 0; width: 100%; padding: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f4f4f4; }
+  </style>
+</head>
+<body>
+  <h1>GraphQL Grade Viewer</h1>
+
+  <h3>Add New Grade</h3>
+  <form id="add-grade-form">
+    <input type="text" id="new-username" placeholder="Username" required />
+    <input type="text" id="new-subject" placeholder="Subject" required />
+    <input type="number" id="new-grade" placeholder="Grade (0-100)" required />
+    <input type="number" id="new-weight" step="0.1" placeholder="Weight (0-1)" required />
+    <button type="submit">Add Grade</button>
+  </form>
+
+  <hr>
+
+  <label for="username">Filter by username:</label>
+  <input type="text" id="username" placeholder="e.g. ivan.31" />
+  <button onclick="fetchGrades()">Load Grades</button>
+
+  <h3>Average grade (weighted): <span id="average">—</span></h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Subject</th>
+        <th>Grade</th>
+        <th>Weight</th>
+      </tr>
+    </thead>
+    <tbody id="table-body"></tbody>
+  </table>
+
+  <script>
+    const url = "/graphql";
+
+    async function fetchGrades() {
+      const username = document.getElementById("username").value.trim();
+
+      const query = `
+        query GetGrades($username: String) {
+          grades(username: $username) {
+            username
+            subject
+            grade
+            weight
+          }
+        }
+      `;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          variables: username ? { username } : {}
+        })
+      });
+
+      const result = await res.json();
+      const grades = result.data.grades;
+      const tbody = document.getElementById("table-body");
+      const avgDisplay = document.getElementById("average");
+
+      tbody.innerHTML = "";
+      let total = 0;
+      let weightSum = 0;
+
+      grades.forEach(g => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${g.username}</td>
+          <td>${g.subject}</td>
+          <td>${g.grade}</td>
+          <td>${g.weight}</td>
+        `;
+        tbody.appendChild(row);
+
+        total += g.grade * g.weight;
+        weightSum += g.weight;
+      });
+
+      avgDisplay.textContent = weightSum ? (total / weightSum).toFixed(2) : "—";
+    }
+
+    document.getElementById("add-grade-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const username = document.getElementById("new-username").value.trim();
+      const subject = document.getElementById("new-subject").value.trim();
+      const grade = parseFloat(document.getElementById("new-grade").value);
+      const weight = parseFloat(document.getElementById("new-weight").value);
+
+      if (grade < 0 || grade > 100 || weight < 0 || weight > 1) {
+        alert("Grade must be 0–100 and weight must be 0–1");
+        return;
+      }
+
+      const mutation = `
+        mutation CreateGrade($username: String!, $subject: String!, $grade: Float!, $weight: Float!) {
+          createGrade(username: $username, subject: $subject, grade: $grade, weight: $weight) {
+            _id
+            username
+          }
+        }
+      `;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: mutation,
+          variables: { username, subject, grade, weight }
+        })
+      });
+
+      if (res.ok) {
+        e.target.reset();
+        fetchGrades(); //update
+      }
+    });
+
+    fetchGrades(); //init
+  </script>
+</body>
+</html>

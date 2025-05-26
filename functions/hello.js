@@ -1,6 +1,6 @@
 exports.handler = async (event, context) => {
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: "Hello, Netlify!" }),
+      body: JSON.stringify({ message: "Hello, test!" }),
     };
   };
